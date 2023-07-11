@@ -1,0 +1,15 @@
+requests
+pandas
+numpy
+click==8
+matplotlib
+streamlit==1.11.1
+altair
+plotly
+PyDeck==0.7.1
+graphviz
+scipy
+Pillow
+streamlit-player
+streamlit-echarts
+pyecharts
