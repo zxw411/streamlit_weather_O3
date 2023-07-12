@@ -27,10 +27,16 @@ from pyecharts.commons.utils import JsCode
 from PIL import Image
 from io import BytesIO
 
+import torch
+from sklearn import preprocessing
+import torch.nn as nn
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+import datetime
+import joblib
 
 def main():
-    st.set_page_config(page_title="zxw",page_icon=":rainbow:",layout="wide",initial_sidebar_state="auto")
-    st.title('天气预报及臭氧短时预测:heart:')
+    st.set_page_config(page_title="Leice-zxw",page_icon=":rainbow:",layout="wide",initial_sidebar_state="auto")
+    st.title('天气预报')
     st.markdown('<br>',unsafe_allow_html=True)
     st.markdown('<br>',unsafe_allow_html=True)
     charts_mapping={
@@ -52,19 +58,12 @@ def main():
         st.balloons()
         st.snow()
 
-    # music=st.sidebar.radio('Select Music You Like',['七里香','稻香'],index=random.choice(range(2)))
-    # st.sidebar.write(f'正在播放 {music}-周杰伦 :musical_note:')
-    # audio_bytes=get_audio_bytes(music)
-    # st.sidebar.audio(audio_bytes, format='audio/mp3')
-
     d=st.sidebar.date_input('Date',st.session_state.date_time.date())
     t=st.sidebar.time_input('Time',st.session_state.date_time.time())
     t=f'{t}'.split('.')[0]
     st.sidebar.write(f'The current date time is {d} {t}')
-    chart=st.sidebar.selectbox('Select Chart You Like',charts_mapping.keys(),index=st.session_state.random_chart_index)
+   # chart=st.sidebar.selectbox('Select Chart You Like',charts_mapping.keys(),index=st.session_state.random_chart_index)
     city=st.sidebar.selectbox('Select City You Like',st.session_state.city_mapping.keys(),index=st.session_state.random_city_index)
-    color = st.sidebar.color_picker('Pick A Color You Like', '#520520')
-    st.sidebar.write('The current color is', color)
 
     with st.container():
         st.markdown(f'### {city} Weather Forecast')
@@ -110,6 +109,22 @@ def main():
         t.add(c1, "24 Hours Forecast")
         t.add(c2, "7 Days Forecast")
         components.html(t.render_embed(), width=1200, height=520)
+        st.markdown(f'### 基于LSTM的平度臭氧短时预报')
+        date,ans_O3= get_O3(st.session_state.date_time)
+        O3 = (
+            Line()
+            .add_xaxis(date)
+            .add_yaxis('O3', ans_O3)
+            .set_global_opts(
+                title_opts=opts.TitleOpts(title="O3"),
+                xaxis_opts=opts.AxisOpts(type_="category"),
+                yaxis_opts=opts.AxisOpts(type_="value",axislabel_opts=opts.LabelOpts(formatter="{value}")),
+                tooltip_opts=opts.TooltipOpts(trigger="axis", axis_pointer_type="cross")
+            )
+        )
+
+        components.html(O3.render_embed(), width=1200, height=520)
+
         with st.expander("24 Hours Forecast Data"):
             st.table(df_forecastHours.style.format({'Temperature':'{}°C','Body Temperature':'{}°C','Humidity':'{}%'}))
         with st.expander("7 Days Forecast Data",expanded=True):
@@ -123,105 +138,82 @@ class MyRandom:
 def my_hash_func(my_random):
     num = my_random.random_num
     return num
-
-@st.cache(hash_funcs={MyRandom: my_hash_func},allow_output_mutation=True,ttl=3600)
-def get_chart_data(chart,my_random):
-    data=np.random.randn(20,3)
-    df=pd.DataFrame(data,columns=['a', 'b', 'c'])
-    if chart in ['Line','Bar','Area']:
-        return df
-
-    elif chart == 'Hist':
-        arr = np.random.normal(1, 1, size=100)
-        fig, ax = plt.subplots()
-        ax.hist(arr, bins=20)
-        return fig
-
-    elif chart == 'Altair':
-        df = pd.DataFrame(np.random.randn(200, 3),columns=['a', 'b', 'c'])
-        c = alt.Chart(df).mark_circle().encode(x='a', y='b', size='c', color='c', tooltip=['a', 'b', 'c'])
-        return c
-
-    elif chart == 'Map':
-        df = pd.DataFrame(np.random.randn(1000, 2) / [50, 50] + [37.76, -122.4],columns=['lat', 'lon'])
-        return df
-
-    elif chart == 'Distplot':
-        x1 = np.random.randn(200) - 2
-        x2 = np.random.randn(200)
-        x3 = np.random.randn(200) + 2
-        # Group data together
-        hist_data = [x1, x2, x3]
-        group_labels = ['Group 1', 'Group 2', 'Group 3']
-        # Create distplot with custom bin_size
-        fig = ff.create_distplot(hist_data, group_labels, bin_size=[.1, .25, .5])
-        # Plot!
-        return fig
-
-    elif chart == 'Pdk':
-        df = pd.DataFrame(np.random.randn(1000, 2) / [50, 50] + [37.76, -122.4],columns=['lat', 'lon'])
-        args=pdk.Deck(map_style='mapbox://styles/mapbox/light-v9',
-            initial_view_state=pdk.ViewState(latitude=37.76,longitude=-122.4,zoom=11,pitch=50,),
-            layers=[pdk.Layer('HexagonLayer',data=df,get_position='[lon, lat]',radius=200,elevation_scale=4,elevation_range=[0, 1000],pickable=True,extruded=True),
-            pdk.Layer('ScatterplotLayer',data=df,get_position='[lon, lat]',get_color='[200, 30, 0, 160]',get_radius=200)])
-        return args
-
-    elif chart == 'Graphviz':
-        graph = graphviz.Digraph()
-        graph.edge('grandfather', 'father')
-        graph.edge('grandmother', 'father')
-        graph.edge('maternal grandfather', 'mother')
-        graph.edge('maternal grandmother', 'mother')
-        graph.edge('father', 'brother')
-        graph.edge('mother', 'brother')
-        graph.edge('father', 'me')
-        graph.edge('mother', 'me')
-        graph.edge('brother', 'nephew')
-        graph.edge('Sister-in-law', 'nephew')
-        graph.edge('brother', 'niece')
-        graph.edge('Sister-in-law', 'niece')
-        graph.edge('me', 'son')
-        graph.edge('me', 'daughter')
-        graph.edge('where my wife?', 'son')
-        graph.edge('where my wife?', 'daughter')
-        return graph
-
-    elif chart == 'PyEchart':
-        options = {
-            "xAxis": {
-                "type": "category",
-                "data": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-            },
-            "yAxis": {"type": "value"},
-            "series": [
-                {"data": [820, 932, 901, 934, 1290, 1330, 1320], "type": "line"}
-            ],
-        }
-        return options
-
-# @st.cache(hash_funcs={MyRandom: my_hash_func},suppress_st_warning=True,ttl=3600)
-# def get_pictures(my_random):
-#     def _get_one(url,what):
-#         try:
-#             img=Image.open(BytesIO(requests.get(requests.get(url,timeout=15).json()[what]).content))
-#             return img
-#         except Exception as e:
-#             if 'cannot identify image file' in str(e):
-#                 return _get_one(url,what)
-#             else:
-#                 return False
-#     imgs={}
-#     mapping={
-#         'https://aws.random.cat/meow':{'name':'A Cat Picture','what':'file'},
-#         'https://random.dog/woof.json':{'name':'A Dog Picture','what':'url'},
-#         'https://randomfox.ca/floof/':{'name':'A Fox Picture','what':'image'},
-#     }
-#     for url,url_map in mapping.items():
-#         img=_get_one(url,url_map['what'])
-#         if img:
-#             imgs[url_map['name']]=img
 #
-#     return imgs
+# @st.cache(hash_funcs={MyRandom: my_hash_func},allow_output_mutation=True,ttl=3600)
+# def get_chart_data(chart,my_random):
+#     data=np.random.randn(20,3)
+#     df=pd.DataFrame(data,columns=['a', 'b', 'c'])
+#     if chart in ['Line','Bar','Area']:
+#         return df
+#
+#     elif chart == 'Hist':
+#         arr = np.random.normal(1, 1, size=100)
+#         fig, ax = plt.subplots()
+#         ax.hist(arr, bins=20)
+#         return fig
+#
+#     elif chart == 'Altair':
+#         df = pd.DataFrame(np.random.randn(200, 3),columns=['a', 'b', 'c'])
+#         c = alt.Chart(df).mark_circle().encode(x='a', y='b', size='c', color='c', tooltip=['a', 'b', 'c'])
+#         return c
+#
+#     elif chart == 'Map':
+#         df = pd.DataFrame(np.random.randn(1000, 2) / [50, 50] + [37.76, -122.4],columns=['lat', 'lon'])
+#         return df
+#
+#     elif chart == 'Distplot':
+#         x1 = np.random.randn(200) - 2
+#         x2 = np.random.randn(200)
+#         x3 = np.random.randn(200) + 2
+#         # Group data together
+#         hist_data = [x1, x2, x3]
+#         group_labels = ['Group 1', 'Group 2', 'Group 3']
+#         # Create distplot with custom bin_size
+#         fig = ff.create_distplot(hist_data, group_labels, bin_size=[.1, .25, .5])
+#         # Plot!
+#         return fig
+#
+#     elif chart == 'Pdk':
+#         df = pd.DataFrame(np.random.randn(1000, 2) / [50, 50] + [37.76, -122.4],columns=['lat', 'lon'])
+#         args=pdk.Deck(map_style='mapbox://styles/mapbox/light-v9',
+#             initial_view_state=pdk.ViewState(latitude=37.76,longitude=-122.4,zoom=11,pitch=50,),
+#             layers=[pdk.Layer('HexagonLayer',data=df,get_position='[lon, lat]',radius=200,elevation_scale=4,elevation_range=[0, 1000],pickable=True,extruded=True),
+#             pdk.Layer('ScatterplotLayer',data=df,get_position='[lon, lat]',get_color='[200, 30, 0, 160]',get_radius=200)])
+#         return args
+#
+#     elif chart == 'Graphviz':
+#         graph = graphviz.Digraph()
+#         graph.edge('grandfather', 'father')
+#         graph.edge('grandmother', 'father')
+#         graph.edge('maternal grandfather', 'mother')
+#         graph.edge('maternal grandmother', 'mother')
+#         graph.edge('father', 'brother')
+#         graph.edge('mother', 'brother')
+#         graph.edge('father', 'me')
+#         graph.edge('mother', 'me')
+#         graph.edge('brother', 'nephew')
+#         graph.edge('Sister-in-law', 'nephew')
+#         graph.edge('brother', 'niece')
+#         graph.edge('Sister-in-law', 'niece')
+#         graph.edge('me', 'son')
+#         graph.edge('me', 'daughter')
+#         graph.edge('where my wife?', 'son')
+#         graph.edge('where my wife?', 'daughter')
+#         return graph
+#
+#     elif chart == 'PyEchart':
+#         options = {
+#             "xAxis": {
+#                 "type": "category",
+#                 "data": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+#             },
+#             "yAxis": {"type": "value"},
+#             "series": [
+#                 {"data": [820, 932, 901, 934, 1290, 1330, 1320], "type": "line"}
+#             ],
+#         }
+#         return options
+
 
 @st.cache(ttl=3600)
 def get_city_mapping():
@@ -238,7 +230,6 @@ def get_city_mapping():
                 guangzhou+=1
             else:
                 flag=False
-
     return city_mapping,guangzhou
 
 @st.cache(ttl=3600)
@@ -291,22 +282,74 @@ def get_city_weather(cityId):
     df_forecastDays=pd.DataFrame(forecastDays).set_index('PredictDate')
     return forecastToday,df_forecastHours,df_forecastDays
 
-# @st.experimental_singleton
-# def get_audio_bytes(music):
-#     audio_file = open(f'music/{music}-周杰伦.mp3', 'rb')
-#     audio_bytes = audio_file.read()
-#     audio_file.close()
-#     return audio_bytes
-#
-# @st.experimental_singleton
-# def get_video_bytes():
-#     video_file = open(f'video/开不了口-广告曲.mp4', 'rb')
-#     video_bytes1 = video_file.read()
-#     video_file.close()
-#     video_file = open(f'video/最长的电影-广告曲.mp4', 'rb')
-#     video_bytes2 = video_file.read()
-#     video_file.close()
-#     return video_bytes1,video_bytes2
+
+@st.cache(ttl=3600)
+def get_O3(now):
+    model1 = torch.load(r"model\model.pkl",map_location=torch.device('cpu'))
+    model2 = torch.load(r"model\model_2.pkl", map_location=torch.device('cpu'))
+    model3 = torch.load(r"model\model_3.pkl", map_location=torch.device('cpu'))
+    data = pd.read_csv(r"data\test.csv")
+    num = 0
+    for i in range(0, len(data)):
+        data_time = datetime.datetime.strptime(data['date'][i], "%Y/%m/%d %H:%M")
+        if now.month == data_time.month and now.day == data_time.day and now.hour == data_time.hour:
+            num = i
+            break
+    ans_O3 =data[num - 23+3:num + 1]["O3"].to_list()
+    ans_date = []
+    for i in data[num - 23+3:num + 1+3]["date"].values:
+        ans_date.append(i.split(" ")[1])
+    test1 = data[num - 23:num + 1].interpolate(method='linear').reset_index(drop=True)
+    test1 = test1.drop(["date"], axis=1)
+    cols = test1.columns.tolist()
+    cols = cols[-11:] + cols[:-11]
+    test1 = test1[cols]
+    test_x_mm = joblib.load(r"model\test_x")
+    test_y_mm = joblib.load(r"model\test_y")
+    X = test_x_mm.transform(np.array(test1)).reshape(1, 24, 14)
+    X = torch.from_numpy(X).to(torch.float32).to(device)
+    model1.eval()
+    with torch.no_grad():
+        y_test_pred1 = model1(X)
+    ans_O3.append(int(test_y_mm.inverse_transform(y_test_pred1.cpu())))
+    model2.eval()
+    with torch.no_grad():
+        y_test_pred2 = model2(X)
+    ans_O3.append(int(test_y_mm.inverse_transform(y_test_pred2.cpu())))
+    model3.eval()
+    with torch.no_grad():
+        y_test_pred3 = model3(X)
+    ans_O3.append(int(test_y_mm.inverse_transform(y_test_pred3.cpu())))
+    return ans_date,ans_O3
 
 if __name__ == '__main__':
+    class LSTM(nn.Module):
+        def __init__(self, feature_size, hidden_size, num_layers, output_size):
+            super(LSTM, self).__init__()
+            self.feature_size = feature_size
+            self.hidden_size = hidden_size  # 隐层大小
+            self.num_layers = num_layers  # lstm层数
+            self.num_directions = 1
+            # feature_size为特征维度，就是每个时间点对应的特征数量，这里为6
+            self.lstm = nn.LSTM(feature_size, hidden_size, num_layers, batch_first=True)
+            self.fc = nn.Linear(self.num_directions * hidden_size, output_size)
+
+        def forward(self, x, hidden=None):
+            batch_size = x.shape[0]  # 获取批次大小
+
+            # 初始化隐层状态
+            if hidden is None:
+                h_0 = x.data.new(self.num_directions * self.num_layers, batch_size, self.hidden_size).fill_(0).float()
+                c_0 = x.data.new(self.num_directions * self.num_layers, batch_size, self.hidden_size).fill_(0).float()
+            else:
+                h_0, c_0 = hidden
+
+            # LSTM运算
+            output, (h_0, c_0) = self.lstm(x, (h_0, c_0))
+
+            # 全连接层
+            output = torch.sigmoid(self.fc(output))  # 形状为batch_size * timestep, 1
+
+            # 我们只需要返回最后一个时间片的数据即可
+            return output[:, -1, :]
     main()
