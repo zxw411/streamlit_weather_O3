@@ -211,7 +211,7 @@ def get_city_weather(cityId):
 @st.cache(ttl=3600)
 def get_O3(now):
     model1 = torch.load(r"./model/model.pkl",map_location=torch.device('cpu'))
-    model2 = torch.load(r"./model/model_2.pkl", map_location=torch.device('cpu'))
+    model2 = torch.load(r"model/model_2.pkl", map_location=torch.device('cpu'))
     model3 = torch.load(r"./model/model_3.pkl", map_location=torch.device('cpu'))
     data = pd.read_csv(r"./data/test.csv")
     num = 0
@@ -229,8 +229,8 @@ def get_O3(now):
     cols = test1.columns.tolist()
     cols = cols[-11:] + cols[:-11]
     test1 = test1[cols]
-    test_x_mm = joblib.load(r"model\test_x")
-    test_y_mm = joblib.load(r"model\test_y")
+    test_x_mm = joblib.load(r"./model/test_x")
+    test_y_mm = joblib.load(r"./model/test_y")
     X = test_x_mm.transform(np.array(test1)).reshape(1, 24, 14)
     X = torch.from_numpy(X).to(torch.float32).to(device)
     model1.eval()
