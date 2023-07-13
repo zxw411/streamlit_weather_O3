@@ -13,3 +13,5 @@ Pillow
 streamlit-player
 streamlit-echarts
 pyecharts
+scikit-learn==0.23.2
+torch==1.13.1
